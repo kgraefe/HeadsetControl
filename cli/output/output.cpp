@@ -26,7 +26,8 @@ using namespace headsetcontrol::serializers;
 // 1.5: an invocation that performs an action no longer reports info it was not
 // explicitly asked for, and structured output gained an additive "sidetone"
 // field for devices that support reading it back.
-constexpr std::string_view API_VERSION = "1.5";
+// 1.6: structured output gained microphone_volume with normalized/native levels.
+constexpr std::string_view API_VERSION = "1.6";
 constexpr std::string_view APP_NAME    = "HeadsetControl";
 
 // ============================================================================
@@ -88,6 +89,19 @@ void processSidetoneResult(const FeatureResult& result, DeviceData& dev)
     }
 }
 
+void processMicVolumeResult(const FeatureResult& result, DeviceData& dev)
+{
+    if (result.status == FEATURE_SUCCESS || result.status == FEATURE_INFO) {
+        dev.microphone_volume = MicVolumeData {
+            .level        = result.value,
+            .device_level = result.microphone_device_level.value_or(0)
+        };
+    } else if (result.status == FEATURE_ERROR) {
+        dev.errors.emplace_back(capability_to_string(CAP_MICROPHONE_VOLUME_STATUS), result.message);
+        dev.status = STATUS_PARTIAL;
+    }
+}
+
 // Process action capability result and add to device actions
 void processActionResult(const FeatureRequest& req, DeviceData& dev, std::string_view device_name)
 {
@@ -118,6 +132,8 @@ void processFeatureRequest(const FeatureRequest& req, DeviceData& dev, std::stri
         processChatmixResult(req.result, dev);
     } else if (req.cap == CAP_SIDETONE_STATUS) {
         processSidetoneResult(req.result, dev);
+    } else if (req.cap == CAP_MICROPHONE_VOLUME_STATUS) {
+        processMicVolumeResult(req.result, dev);
     } else if (req.type == CAPABILITYTYPE_ACTION) {
         processActionResult(req, dev, device_name);
     }
@@ -315,6 +331,10 @@ void outputYaml(const OutputData& data)
                 dev.sidetone->serialize(s);
             }
 
+            if (dev.microphone_volume.has_value()) {
+                dev.microphone_volume->serialize(s);
+            }
+
             if (!dev.errors.empty()) {
                 s.beginObject("errors");
                 for (const auto& err : dev.errors) {
@@ -434,6 +454,11 @@ void outputEnv(const OutputData& data)
             }
         }
 
+        if (dev.microphone_volume.has_value()) {
+            s.write(prefix + "_MICROPHONE_VOLUME_LEVEL", dev.microphone_volume->level);
+            s.write(prefix + "_MICROPHONE_VOLUME_DEVICE_LEVEL", dev.microphone_volume->device_level);
+        }
+
         s.write(prefix + "_ERROR_COUNT", static_cast<int>(dev.errors.size()));
         for (size_t j = 0; j < dev.errors.size(); ++j) {
             s.write(std::format("{}_ERROR_{}_SOURCE", prefix, j + 1), dev.errors[j].source);
@@ -508,6 +533,12 @@ void outputStandard(const OutputData& data, bool print_capabilities)
                 s.println("Sidetone: {} ({}; device level {})", dev.sidetone->name,
                     dev.sidetone->level, dev.sidetone->device_level);
             }
+            outputted = true;
+        }
+
+        if (dev.microphone_volume.has_value()) {
+            s.println("Microphone volume: {} (device level {})",
+                dev.microphone_volume->level, dev.microphone_volume->device_level);
             outputted = true;
         }
 
@@ -587,6 +618,8 @@ void outputShort(const OutputData& data, bool print_capabilities)
             s.printValue(*dev.chatmix);
         } else if (dev.sidetone.has_value()) {
             s.printValue(dev.sidetone->level);
+        } else if (dev.microphone_volume.has_value()) {
+            s.printValue(dev.microphone_volume->level);
         }
     }
 

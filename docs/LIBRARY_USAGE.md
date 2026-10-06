@@ -28,7 +28,7 @@ headsetcontrol -o env
 {
   "name": "HeadsetControl",
   "version": "3.0.0",
-  "api_version": "1.5",
+  "api_version": "1.6",
   "device_count": 1,
   "devices": [
     {
@@ -377,6 +377,25 @@ if (headset.supports(CAP_PARAMETRIC_EQUALIZER)) {
 ```
 
 ### Microphone
+
+```cpp
+// Read hardware microphone volume (when supported)
+if (headset.supports(CAP_MICROPHONE_VOLUME_STATUS)) {
+    auto volume = headset.getMicVolume();
+    if (volume) {
+        std::cout << "Microphone: " << (int)volume->volume
+                  << " (device level " << (int)volume->device_level << ")\n";
+    }
+}
+```
+
+Microphone-volume readback returns the normalized 0-128 volume and the
+device-native level and range. The native range depends on the actual device.
+
+Use `headsetcontrol --microphone-volume` to read or
+`headsetcontrol --microphone-volume 128` to set the maximum. Structured
+output API 1.6 adds `microphone_volume: {level, device_level}` for supported
+devices. It is omitted on query failure, with an error reported instead.
 
 ```cpp
 // Mic volume (0-128)
@@ -738,6 +757,14 @@ hsc_set_equalizer(headset, bands, 6);
 // Mic volume
 hsc_set_mic_volume(headset, 100);
 
+// Read mic volume (normalized and device-native ranges)
+hsc_mic_volume_t mic_volume;
+if (hsc_supports(headset, HSC_CAP_MICROPHONE_VOLUME_STATUS)
+    && hsc_get_mic_volume(headset, &mic_volume) == HSC_RESULT_OK) {
+    printf("Microphone: %u (device level %u)\n",
+        mic_volume.volume, mic_volume.device_level);
+}
+
 // Voice prompts
 hsc_set_voice_prompts(headset, false);
 ```
@@ -785,6 +812,7 @@ HSC_CAP_EQUALIZER
 HSC_CAP_PARAMETRIC_EQUALIZER
 HSC_CAP_MICROPHONE_MUTE_LED_BRIGHTNESS
 HSC_CAP_MICROPHONE_VOLUME
+HSC_CAP_MICROPHONE_VOLUME_STATUS
 HSC_CAP_VOLUME_LIMITER
 HSC_CAP_BT_WHEN_POWERED_ON
 HSC_CAP_BT_CALL_VOLUME

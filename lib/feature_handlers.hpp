@@ -22,6 +22,7 @@ struct FeatureOutput {
     std::optional<BatteryResult> battery; // Extended battery info
     std::optional<ChatmixResult> chatmix; // Extended chatmix info
     std::optional<SidetoneResult> sidetone; // Extended sidetone info
+    std::optional<MicVolumeResult> microphone_volume; // Hardware microphone volume
 
     static FeatureOutput success(int val, std::string msg = "")
     {
@@ -52,6 +53,14 @@ struct FeatureOutput {
             .value    = s.current_level,
             .message  = "",
             .sidetone = s
+        };
+    }
+
+    static FeatureOutput fromMicVolume(const MicVolumeResult& volume)
+    {
+        return {
+            .value             = volume.volume,
+            .microphone_volume = volume
         };
     }
 };
@@ -347,6 +356,14 @@ inline void FeatureHandlerRegistry::registerAllHandlers()
         if (r.hasError())
             return r.error();
         return FeatureOutput::fromSidetone(r.value());
+    });
+
+    // CAP_MICROPHONE_VOLUME_STATUS
+    registerHandler(CAP_MICROPHONE_VOLUME_STATUS, [](HIDDevice* dev, hid_device* h, const FeatureParam&) -> Result<FeatureOutput> {
+        auto r = dev->getMicVolume(h);
+        if (r.hasError())
+            return r.error();
+        return FeatureOutput::fromMicVolume(r.value());
     });
 }
 

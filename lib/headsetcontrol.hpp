@@ -206,6 +206,11 @@ public:
     [[nodiscard]] Result<MicVolumeResult> setMicVolume(uint8_t volume);
 
     /**
+     * @brief Get microphone volume in normalized and device-native ranges
+     */
+    [[nodiscard]] Result<MicVolumeResult> getMicVolume();
+
+    /**
      * @brief Set microphone mute LED brightness
      * @param brightness Brightness level (0-3)
      */

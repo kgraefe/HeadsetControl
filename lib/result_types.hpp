@@ -287,6 +287,9 @@ struct MicVolumeResult {
     uint8_t volume; // Volume level
     uint8_t min_volume; // Minimum supported
     uint8_t max_volume; // Maximum supported
+    uint8_t device_level = 0; // Current level in the device's native range
+    uint8_t device_min   = 0; // Device's native minimum
+    uint8_t device_max   = 0; // Device's native maximum
 };
 
 /**

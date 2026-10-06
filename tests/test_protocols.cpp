@@ -727,11 +727,15 @@ public:
     std::vector<int> read_timeouts;
     std::vector<size_t> writes_at_read;
     std::vector<std::vector<uint8_t>> writes;
+    size_t fail_on_write = 0;
 
     [[nodiscard]] auto write(hid_device* /*device_handle*/, std::span<const uint8_t> data)
         -> Result<void> override
     {
         writes.emplace_back(data.begin(), data.end());
+        if (fail_on_write != 0 && writes.size() == fail_on_write) {
+            return DeviceError::hidError("Scripted write failure");
+        }
         return {};
     }
 
@@ -741,6 +745,9 @@ public:
         std::vector<uint8_t> padded(size, 0);
         std::copy_n(data.begin(), std::min(data.size(), size), padded.begin());
         writes.push_back(std::move(padded));
+        if (fail_on_write != 0 && writes.size() == fail_on_write) {
+            return DeviceError::hidError("Scripted write failure");
+        }
         return {};
     }
 
@@ -823,6 +830,113 @@ void testSteelSeriesNova3PMicVolumeMapping()
             ASSERT_EQ(0x09, dev.hid.writes[1][1], "Save command should use opcode 0x09");
         }
     }
+}
+
+void testSteelSeriesNova3PMicVolumeReadback()
+{
+    constexpr std::array<uint8_t, 16> NORMALIZED {
+        0, 9, 18, 26, 35, 43, 52, 60, 69, 77, 86, 94, 103, 111, 120, 128
+    };
+    for (uint16_t product_id : SteelSeriesArctisNova3PWireless::SUPPORTED_PRODUCT_IDS) {
+        TestableNova3PWireless dev;
+        dev.setMatchedProductId(product_id);
+        ASSERT_TRUE((dev.getCapabilities() & B(CAP_MICROPHONE_VOLUME_STATUS)) != 0,
+            "Nova 3P/3X should advertise microphone volume readback");
+        for (uint8_t level = 0; level < NORMALIZED.size(); ++level) {
+            dev.hid.writes.clear();
+            std::vector<uint8_t> settings(64, 0);
+            settings[0]  = 0x20;
+            settings[1]  = 60; // EQ data must not be mistaken for microphone gain.
+            settings[61] = level;
+            settings[62] = 5;
+            dev.hid.replies.emplace_back(settings);
+
+            auto result = dev.getMicVolume(nullptr);
+            ASSERT_TRUE(result.hasValue(), "Configured microphone volume readback should succeed");
+            ASSERT_EQ(NORMALIZED[level], result->volume, "Readback should normalize the hardware level");
+            ASSERT_EQ(level, result->device_level, "Microphone gain is at byte 61 after the EQ bands");
+            ASSERT_EQ(0, result->device_min, "Native minimum is zero");
+            ASSERT_EQ(15, result->device_max, "Native maximum is 15");
+            ASSERT_EQ(0, result->min_volume, "Normalized minimum is zero");
+            ASSERT_EQ(128, result->max_volume, "Normalized maximum is 128");
+            ASSERT_EQ(1u, dev.hid.writes.size(), "Readback must send only the audio-settings query");
+            ASSERT_EQ(0x20, dev.hid.writes[0][1], "Query must read audio settings directly");
+            for (const auto& request : dev.hid.writes) {
+                ASSERT_EQ(65u, request.size(), "GG framing uses 64 bytes plus synthetic report ID zero");
+                ASSERT_EQ(0, request[0], "Synthetic report ID should be zero");
+                ASSERT_TRUE(std::all_of(request.begin() + 2, request.end(), [](uint8_t byte) { return byte == 0; }),
+                    "Query must be zero-padded");
+            }
+
+            dev.hid.writes.clear();
+            ASSERT_TRUE(dev.setMicVolume(nullptr, result->volume).hasValue(), "Normalized readback should be settable");
+            ASSERT_EQ(level, dev.hid.writes[0][2], "Setting a readback value must preserve the hardware level");
+        }
+    }
+}
+
+void testSteelSeriesNova3PMicVolumeReadbackErrors()
+{
+    for (uint8_t state : { 0, 1, 2 }) {
+        TestableNova3PWireless dev;
+        dev.hid.replies.emplace_back(std::vector<uint8_t> { 0xb0, state, 0, 99, 0 });
+        std::vector<uint8_t> settings(64, 0);
+        settings[0]  = 0x20;
+        settings[61] = 14;
+        dev.hid.replies.emplace_back(settings);
+        auto result = dev.getMicVolume(nullptr);
+        ASSERT_TRUE(result.hasValue(), "Offline status must not prevent reading the configured gain");
+        ASSERT_EQ(14, result->device_level, "Configured microphone level should be returned while offline");
+        ASSERT_EQ(1u, dev.hid.writes.size(), "Offline readback must send only the audio-settings query");
+    }
+
+    for (int fault = 0; fault < 3; ++fault) {
+        TestableNova3PWireless dev;
+        std::vector<uint8_t> settings(64, 0);
+        settings[0] = 0x20;
+        if (fault == 0)
+            settings.resize(61);
+        else if (fault == 1)
+            settings[0] = 0x21;
+        else
+            settings[61] = 16;
+        dev.hid.replies.emplace_back(settings);
+        auto result = dev.getMicVolume(nullptr);
+        ASSERT_TRUE(result.hasError() && result.error().code == DeviceError::Code::ProtocolError,
+            "Short, unexpected, or out-of-range audio settings must fail");
+    }
+
+    {
+        TestableNova3PWireless dev;
+        dev.hid.fail_on_write = 1;
+        auto result           = dev.getMicVolume(nullptr);
+        ASSERT_TRUE(result.hasError() && result.error().code == DeviceError::Code::HIDError,
+            "Query write failures should be propagated");
+    }
+
+    for (const auto& failure : {
+             Result<std::vector<uint8_t>>(DeviceError::hidError("Read failed")),
+             Result<std::vector<uint8_t>>(DeviceError::timeout("Read timed out")),
+             Result<std::vector<uint8_t>>(std::vector<uint8_t> {}) }) {
+        TestableNova3PWireless dev;
+        dev.hid.replies.push_back(failure);
+        auto result         = dev.getMicVolume(nullptr);
+        const auto expected = failure.hasError() ? failure.error().code : DeviceError::Code::Timeout;
+        ASSERT_TRUE(result.hasError() && result.error().code == expected,
+            "Read errors and zero-byte reads should be propagated");
+    }
+
+    TestableNova3PWireless dev;
+    dev.hid.replies.emplace_back(std::vector<uint8_t> { 0xb0 });
+    std::vector<uint8_t> settings(64, 0);
+    settings[0]  = 0x20;
+    settings[61] = 15;
+    dev.hid.replies.emplace_back(settings);
+    ASSERT_TRUE(dev.getMicVolume(nullptr).hasValue(), "Short asynchronous status should be skipped before length validation");
+
+    for (int report = 0; report < 8; ++report)
+        dev.hid.replies.emplace_back(std::vector<uint8_t> { 0xb0 });
+    ASSERT_TRUE(dev.getMicVolume(nullptr).hasError(), "Repeated unrelated status must not cause an unbounded read loop");
 }
 
 class TestableAstroA50Gen4 : public LogitechAstroA50Gen4 {
@@ -1437,6 +1551,8 @@ void runAllProtocolTests()
     runTest("SteelSeries Chatmix Mapping", testSteelSeriesChatmixMapping);
     runTest("SteelSeries Sidetone Mapping", testSteelSeriesSidetoneMapping);
     runTest("SteelSeries Nova 3P/3X Microphone Volume Mapping", testSteelSeriesNova3PMicVolumeMapping);
+    runTest("SteelSeries Nova 3P/3X Microphone Volume Readback", testSteelSeriesNova3PMicVolumeReadback);
+    runTest("SteelSeries Nova 3P/3X Microphone Volume Readback Errors", testSteelSeriesNova3PMicVolumeReadbackErrors);
 
     std::cout << "\n=== Corsair Protocol ===" << std::endl;
     runTest("Corsair Sidetone Mapping", testCorsairSidetoneMapping);

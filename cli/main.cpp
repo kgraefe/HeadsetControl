@@ -152,9 +152,10 @@ struct Options {
     std::optional<uint8_t> noise_filter;
 
     // Info requests
-    bool request_battery  = false;
-    bool request_chatmix  = false;
-    bool request_sidetone = false;
+    bool request_battery    = false;
+    bool request_chatmix    = false;
+    bool request_sidetone   = false;
+    bool request_mic_volume = false;
 
     // Complex settings
     std::optional<EqualizerSettings> equalizer;
@@ -266,7 +267,21 @@ std::optional<cli::ParseError> configureParser(cli::ArgumentParser& parser, Opti
 
         // === Microphone ===
         .long_value("microphone-mute-led-brightness", opts.mic_mute_led_brightness, uint8_t(0), uint8_t(3), "Set mic mute LED brightness", "LEVEL")
-        .long_value("microphone-volume", opts.mic_volume, uint8_t(0), uint8_t(128), "Set microphone volume", "VOLUME")
+        .long_custom("microphone-volume", cli::ArgRequirement::Optional, [&opts](std::optional<std::string_view> arg) -> std::optional<cli::ParseError> {
+                if (!arg || arg->empty()) {
+                    opts.mic_volume.reset();
+                    opts.request_mic_volume = true;
+                    return std::nullopt;
+                }
+
+                uint8_t volume {};
+                if (auto error = cli::parseInteger(*arg, volume, uint8_t(0), uint8_t(128), "microphone-volume")) {
+                    return error;
+                }
+
+                opts.mic_volume = volume;
+                opts.request_mic_volume = false;
+                return std::nullopt; }, "Get current microphone volume, or set it to VOLUME", "VOLUME")
 
         // === Volume ===
         .long_toggle("volume-limiter", opts.volume_limiter_enabled, "Toggle volume limiter")
@@ -593,6 +608,11 @@ FeatureResult convertToFeatureResult(const headsetcontrol::FeatureOutput& output
         result.sidetone_level_name   = output.sidetone->level_name;
     }
 
+    if (output.microphone_volume) {
+        result.value                   = output.microphone_volume->volume;
+        result.microphone_device_level = output.microphone_volume->device_level;
+    }
+
     return result;
 }
 
@@ -893,7 +913,7 @@ namespace help {
             sections.back()
                 .add('r', "rotate-to-mute", getValueHint(CAP_ROTATE_TO_MUTE), "Mute when boom arm raised", CAP_ROTATE_TO_MUTE)
                 .add("microphone-mute-led-brightness", getValueHint(CAP_MICROPHONE_MUTE_LED_BRIGHTNESS), "Mute LED brightness", CAP_MICROPHONE_MUTE_LED_BRIGHTNESS)
-                .add("microphone-volume", getValueHint(CAP_MICROPHONE_VOLUME), "Microphone gain level", CAP_MICROPHONE_VOLUME)
+                .add("microphone-volume", getValueHint(CAP_MICROPHONE_VOLUME), "Get/set microphone gain (0-128)", CAP_MICROPHONE_VOLUME)
                 .add("noise-filter", getValueHint(CAP_NOISE_FILTER), "Microphone noise filter level (0=off, 1=low, 2=high)", CAP_NOISE_FILTER);
 
             // Lights & Audio Cues - value hints from capability descriptors
@@ -1057,6 +1077,7 @@ void initializeFeatureRequests(std::vector<DiscoveredDevice>& devices, const Opt
         { CAP_EQUALIZER_PRESET, CAPABILITYTYPE_ACTION, g_feature_params.equalizer_preset_val, opts.equalizer_preset.has_value(), {} },
         { CAP_MICROPHONE_MUTE_LED_BRIGHTNESS, CAPABILITYTYPE_ACTION, g_feature_params.mic_led_val, opts.mic_mute_led_brightness.has_value(), {} },
         { CAP_MICROPHONE_VOLUME, CAPABILITYTYPE_ACTION, g_feature_params.mic_vol_val, opts.mic_volume.has_value(), {} },
+        { CAP_MICROPHONE_VOLUME_STATUS, CAPABILITYTYPE_INFO, std::monostate {}, opts.request_mic_volume, {} },
         { CAP_EQUALIZER, CAPABILITYTYPE_ACTION, opts.equalizer.has_value() ? FeatureParam { g_feature_params.equalizer_settings } : FeatureParam { std::monostate {} }, opts.equalizer.has_value(), {} },
         { CAP_PARAMETRIC_EQUALIZER, CAPABILITYTYPE_ACTION, opts.parametric_equalizer.has_value() ? FeatureParam { g_feature_params.parametric_eq_settings } : FeatureParam { std::monostate {} }, opts.parametric_equalizer.has_value(), {} },
         { CAP_VOLUME_LIMITER, CAPABILITYTYPE_ACTION, g_feature_params.volume_limiter_val, opts.volume_limiter_enabled.has_value(), {} },

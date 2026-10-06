@@ -312,6 +312,7 @@ void testCliActionOnlyOmitsUnrequestedInfo()
     ASSERT_CONTAINS(output, "\"actions\":", "Should have actions array");
     ASSERT_NOT_CONTAINS(output, "\"battery\":", "Battery info should be omitted when not requested");
     ASSERT_NOT_CONTAINS(output, "\"chatmix\":", "Chatmix info should be omitted when not requested");
+    ASSERT_NOT_CONTAINS(output, "\"microphone_volume\":", "Microphone volume should be omitted when not requested");
 
     std::cout << "    ✓ Action-only invocation omits unrequested info" << std::endl;
 }
@@ -341,6 +342,7 @@ void testCliPureQueryStillReturnsAllInfo()
 
     ASSERT_CONTAINS(output, "\"battery\":", "Pure query should still report battery");
     ASSERT_CONTAINS(output, "\"chatmix\":", "Pure query should still report chatmix");
+    ASSERT_CONTAINS(output, "\"microphone_volume\":", "Pure query should report supported microphone volume");
 
     std::cout << "    ✓ Pure query still returns all extended info" << std::endl;
 }
@@ -441,6 +443,53 @@ void testCliSidetoneStatusOutputs()
         "help should not expose a separate sidetone status option");
 
     std::cout << "    ✓ Sidetone status output is correct" << std::endl;
+}
+
+void testCliMicVolumeStatusOutputs()
+{
+    const std::string base = HEADSETCONTROL_EXE " --test-device -d 0xf00b:0xa00c --microphone-volume -o ";
+    std::string json       = exec((base + "json 2>&1").c_str());
+    ASSERT_CONTAINS(json, "\"microphone_volume\": {", "JSON should contain microphone volume readback");
+    ASSERT_CONTAINS(json, "\"level\": 103", "JSON should contain normalized microphone volume");
+    ASSERT_CONTAINS(json, "\"device_level\": 12", "JSON should contain native microphone volume");
+    ASSERT_CONTAINS(json, "\"api_version\": \"1.6\"", "Additive microphone field should increment API version");
+    ASSERT_NOT_CONTAINS(json, "\"actions\":", "Reading microphone volume must not become a write action");
+
+    std::string yaml = exec((base + "yaml 2>&1").c_str());
+    ASSERT_CONTAINS(yaml, "microphone_volume:", "YAML should contain microphone volume");
+    ASSERT_CONTAINS(yaml, "level: 103", "YAML should contain normalized microphone volume");
+    ASSERT_CONTAINS(yaml, "device_level: 12", "YAML should contain native microphone volume");
+
+    std::string env = exec((base + "env 2>&1").c_str());
+    ASSERT_CONTAINS(env, "DEVICE_0_MICROPHONE_VOLUME_LEVEL=103", "ENV should contain normalized microphone volume");
+    ASSERT_CONTAINS(env, "DEVICE_0_MICROPHONE_VOLUME_DEVICE_LEVEL=12", "ENV should contain native microphone volume");
+
+    std::string standard = exec((base + "standard 2>&1").c_str());
+    ASSERT_CONTAINS(standard, "Microphone volume: 103 (device level 12)", "Standard output should show both ranges");
+
+    std::string set = exec(HEADSETCONTROL_EXE " --test-device -d 0xf00b:0xa00c --microphone-volume 128 -o json 2>&1");
+    ASSERT_CONTAINS(set, "\"actions\":", "Supplying a volume should retain the setter");
+    ASSERT_CONTAINS(set, "\"value\": 128", "Setter should retain the normalized input");
+    ASSERT_NOT_CONTAINS(set, "\"microphone_volume\":", "Setter should not force a readback");
+
+    std::string query_last = exec(HEADSETCONTROL_EXE " --test-device -d 0xf00b:0xa00c --microphone-volume 0 --microphone-volume -o json 2>&1");
+    ASSERT_NOT_CONTAINS(query_last, "\"actions\":", "A final query option must clear the earlier setter");
+    ASSERT_CONTAINS(query_last, "\"microphone_volume\":", "A final query option should read microphone volume");
+    std::string set_last = exec(HEADSETCONTROL_EXE " --test-device -d 0xf00b:0xa00c --microphone-volume --microphone-volume=0 -o json 2>&1");
+    ASSERT_CONTAINS(set_last, "\"actions\":", "A final zero-valued setter must remain an action");
+    ASSERT_NOT_CONTAINS(set_last, "\"microphone_volume\":", "A final setter option must clear the earlier query");
+
+    std::string error = exec(HEADSETCONTROL_EXE " --test-device=1 -d 0xf00b:0xa00c --microphone-volume -o json 2>&1");
+    ASSERT_CONTAINS(error, "microphone volume status", "Readback errors should identify the feature");
+    ASSERT_NOT_CONTAINS(error, "\"microphone_volume\":", "Failed readback must not fabricate a level");
+
+    std::string unsupported = exec(HEADSETCONTROL_EXE " --test-device=10 -d 0xf00b:0xa00c --microphone-volume 2>&1");
+    ASSERT_CONTAINS(unsupported, "doesn't support microphone-volume-status", "Unsupported readback must report an error");
+    std::string invalid = exec(HEADSETCONTROL_EXE " --test-device --microphone-volume 129 2>&1");
+    ASSERT_CONTAINS(invalid, "Error:", "Out-of-range setter values should still fail");
+
+    std::string help = exec(HEADSETCONTROL_EXE " --test-device --help-all 2>&1");
+    ASSERT_CONTAINS(help, "--microphone-volume [VOLUME]", "Help should document optional microphone volume");
 }
 
 // ============================================================================
@@ -578,6 +627,7 @@ void runAllCliOutputTests()
     runTest("Standard Battery Details", testCliStandardBatteryDetails);
     runTest("Standard No Args", testCliStandardNoArgs);
     runTest("Sidetone Status Outputs", testCliSidetoneStatusOutputs);
+    runTest("Microphone Volume Status Outputs", testCliMicVolumeStatusOutputs);
 
     std::cout << "\n=== Short Output Tests ===" << std::endl;
     runTest("Short Output", testCliShortOutput);

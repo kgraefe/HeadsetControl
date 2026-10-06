@@ -314,6 +314,11 @@ Result<MicVolumeResult> Headset::setMicVolume(uint8_t volume)
     HEADSET_FEATURE_IMPL(CAP_MICROPHONE_VOLUME, setMicVolume, volume);
 }
 
+Result<MicVolumeResult> Headset::getMicVolume()
+{
+    HEADSET_FEATURE_IMPL(CAP_MICROPHONE_VOLUME_STATUS, getMicVolume);
+}
+
 Result<MicMuteLedBrightnessResult> Headset::setMicMuteLedBrightness(uint8_t brightness)
 {
     HEADSET_FEATURE_IMPL(CAP_MICROPHONE_MUTE_LED_BRIGHTNESS, setMicMuteLedBrightness, brightness);

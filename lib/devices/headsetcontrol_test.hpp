@@ -69,7 +69,7 @@ public:
             | B(CAP_EQUALIZER) | B(CAP_PARAMETRIC_EQUALIZER)
             | B(CAP_MICROPHONE_MUTE_LED_BRIGHTNESS) | B(CAP_MICROPHONE_VOLUME)
             | B(CAP_VOLUME_LIMITER) | B(CAP_BT_WHEN_POWERED_ON) | B(CAP_BT_CALL_VOLUME)
-            | B(CAP_NOISE_FILTER) | B(CAP_SIDETONE_STATUS);
+            | B(CAP_NOISE_FILTER) | B(CAP_SIDETONE_STATUS) | B(CAP_MICROPHONE_VOLUME_STATUS);
     }
 
     std::optional<EqualizerInfo> getEqualizerInfo() const override
@@ -213,6 +213,24 @@ public:
     Result<MicVolumeResult> setMicVolume([[maybe_unused]] hid_device* device_handle, uint8_t volume) override
     {
         return MicVolumeResult { .volume = volume, .min_volume = 0, .max_volume = 100 };
+    }
+
+    Result<MicVolumeResult> getMicVolume([[maybe_unused]] hid_device* device_handle) override
+    {
+        if (test_profile == 1) {
+            return DeviceError::hidError("Test error condition");
+        }
+        if (test_profile == 5) {
+            return DeviceError::timeout("Test timeout");
+        }
+        return MicVolumeResult {
+            .volume       = 103,
+            .min_volume   = 0,
+            .max_volume   = 128,
+            .device_level = 12,
+            .device_min   = 0,
+            .device_max   = 15
+        };
     }
 
     Result<MicMuteLedBrightnessResult> setMicMuteLedBrightness([[maybe_unused]] hid_device* device_handle, uint8_t brightness) override

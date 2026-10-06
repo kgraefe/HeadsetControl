@@ -70,7 +70,7 @@ public:
     OutputData data;
     data.name           = "HeadsetControl";
     data.version        = "1.0.0-test";
-    data.api_version    = "1.5";
+    data.api_version    = "1.6";
     data.hidapi_version = "0.15.0";
 
     DeviceData dev;
@@ -89,6 +89,7 @@ public:
 
     dev.chatmix  = 64;
     dev.sidetone = SidetoneData { .level = 43, .device_level = 1, .name = "Low" };
+    dev.microphone_volume = MicVolumeData { .level = 0, .device_level = 0 };
 
     data.devices.push_back(dev);
 
@@ -407,6 +408,9 @@ void testFullJsonOutput()
     ASSERT_CONTAINS(result, "\"sidetone\": {", "Should have sidetone object");
     ASSERT_CONTAINS(result, "\"device_level\": 1", "Should have native sidetone level");
     ASSERT_CONTAINS(result, "\"name\": \"Low\"", "Should have sidetone name");
+    ASSERT_CONTAINS(result, "\"microphone_volume\": {", "Should have microphone volume object");
+    ASSERT_CONTAINS(result, "\"level\": 0", "Zero microphone volume must not be omitted");
+    ASSERT_CONTAINS(result, "\"device_level\": 0", "Zero native microphone volume must not be omitted");
 
     std::cout << "    ✓ Full JSON output is correct" << std::endl;
 }

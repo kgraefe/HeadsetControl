@@ -124,6 +124,19 @@ struct ErrorData {
     std::string message;
 };
 
+struct MicVolumeData {
+    int level        = 0;
+    int device_level = 0;
+
+    void serialize(Serializer& s) const
+    {
+        s.beginObject("microphone_volume");
+        s.write("level", level);
+        s.write("device_level", device_level);
+        s.endObject();
+    }
+};
+
 struct EqualizerPresetData {
     std::string name;
     std::vector<float> values;
@@ -196,6 +209,7 @@ struct DeviceData {
     std::optional<BatteryData> battery;
     std::optional<int> chatmix;
     std::optional<SidetoneData> sidetone;
+    std::optional<MicVolumeData> microphone_volume;
     std::optional<EqualizerData> equalizer;
     std::optional<int> equalizer_presets_count;
     std::optional<std::vector<EqualizerPresetData>> equalizer_presets;
@@ -253,6 +267,10 @@ struct DeviceData {
 
         if (sidetone.has_value()) {
             sidetone->serialize(s);
+        }
+
+        if (microphone_volume.has_value()) {
+            microphone_volume->serialize(s);
         }
 
         if (!errors.empty()) {

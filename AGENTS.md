@@ -172,6 +172,7 @@ Capabilities are enumerated in `lib/device.hpp` via the `CAPABILITIES_XLIST` mac
 - `CAP_PARAMETRIC_EQUALIZER` — Parametric EQ (gain, Q-factor, frequency)
 - `CAP_MICROPHONE_MUTE_LED_BRIGHTNESS`
 - `CAP_MICROPHONE_VOLUME`
+- `CAP_MICROPHONE_VOLUME_STATUS` — Read hardware microphone volume
 - `CAP_VOLUME_LIMITER`
 - `CAP_BT_WHEN_POWERED_ON` — Bluetooth-on-power-on behavior
 - `CAP_BT_CALL_VOLUME`

@@ -266,6 +266,9 @@ void testCNullHandling()
     hsc_sidetone_status_t sidetone_status;
     ASSERT_EQ(HSC_RESULT_INVALID_PARAM, hsc_get_sidetone(nullptr, &sidetone_status), "get_sidetone(null) should fail");
 
+    hsc_mic_volume_t mic_volume;
+    ASSERT_EQ(HSC_RESULT_INVALID_PARAM, hsc_get_mic_volume(nullptr, &mic_volume), "get_mic_volume(null) should fail");
+
     ASSERT_EQ(HSC_RESULT_INVALID_PARAM, hsc_set_sidetone(nullptr, 64, nullptr), "set_sidetone(null) should fail");
     ASSERT_EQ(HSC_RESULT_INVALID_PARAM, hsc_set_lights(nullptr, true), "set_lights(null) should fail");
 
@@ -310,6 +313,7 @@ void testCppTestDeviceMode()
             ASSERT_TRUE(headset.supports(CAP_SIDETONE), "Test device should support sidetone");
             ASSERT_TRUE(headset.supports(CAP_CHATMIX_STATUS), "Test device should support chatmix");
             ASSERT_TRUE(headset.supports(CAP_SIDETONE_STATUS), "Test device should support sidetone status");
+            ASSERT_TRUE(headset.supports(CAP_MICROPHONE_VOLUME_STATUS), "Test device should support microphone volume status");
 
             // Test battery
             auto battery = headset.getBattery();
@@ -325,6 +329,12 @@ void testCppTestDeviceMode()
             ASSERT_TRUE(sidetone_status.hasValue(), "Sidetone status should return success");
             ASSERT_EQ(85, sidetone_status->current_level, "Sidetone status should be 85");
             ASSERT_EQ(2, sidetone_status->device_level, "Native sidetone level should be 2");
+
+            auto mic_volume = headset.getMicVolume();
+            ASSERT_TRUE(mic_volume.hasValue(), "Microphone volume status should return success");
+            ASSERT_EQ(103, mic_volume->volume, "Normalized microphone volume should be 103");
+            ASSERT_EQ(12, mic_volume->device_level, "Native microphone level should be 12");
+            ASSERT_EQ(15, mic_volume->device_max, "Native microphone maximum should be 15");
 
             // Test chatmix
             auto chatmix = headset.getChatmix();
@@ -426,6 +436,7 @@ void testCTestDeviceMode()
             ASSERT_TRUE(hsc_supports(headsets[i], HSC_CAP_BATTERY_STATUS), "Should support battery");
             ASSERT_TRUE(hsc_supports(headsets[i], HSC_CAP_SIDETONE), "Should support sidetone");
             ASSERT_TRUE(hsc_supports(headsets[i], HSC_CAP_SIDETONE_STATUS), "Should support sidetone status");
+            ASSERT_TRUE(hsc_supports(headsets[i], HSC_CAP_MICROPHONE_VOLUME_STATUS), "Should support microphone volume status");
 
             // Test battery
             hsc_battery_t battery;
@@ -443,6 +454,27 @@ void testCTestDeviceMode()
             ASSERT_EQ(2, sidetone_status.device_level, "Native sidetone level should be 2");
             ASSERT_NOT_NULL(sidetone_status.level_name, "Sidetone name should be available");
             ASSERT_EQ(std::string("Medium"), std::string(sidetone_status.level_name), "Sidetone name should match");
+
+            hsc_mic_volume_t mic_volume;
+            ASSERT_EQ(HSC_RESULT_OK, hsc_get_mic_volume(headsets[i], &mic_volume), "Microphone volume status should succeed");
+            ASSERT_EQ(103, mic_volume.volume, "Normalized microphone volume should be 103");
+            ASSERT_EQ(12, mic_volume.device_level, "Native microphone level should be 12");
+            ASSERT_EQ(0, mic_volume.min_volume, "Minimum normalized microphone volume should be zero");
+            ASSERT_EQ(128, mic_volume.max_volume, "Maximum normalized microphone volume should be 128");
+            ASSERT_EQ(0, mic_volume.device_min, "Minimum native microphone volume should be zero");
+            ASSERT_EQ(15, mic_volume.device_max, "Maximum native microphone volume should be 15");
+            ASSERT_EQ(HSC_RESULT_INVALID_PARAM, hsc_get_mic_volume(headsets[i], nullptr), "Null volume output should fail");
+
+            for (const auto& failure : {
+                     std::pair { 1, HSC_RESULT_HID_ERROR },
+                     std::pair { 5, HSC_RESULT_TIMEOUT },
+                     std::pair { 10, HSC_RESULT_NOT_SUPPORTED } }) {
+                headsetcontrol::setTestProfile(failure.first);
+                ASSERT_EQ(failure.second, hsc_get_mic_volume(headsets[i], &mic_volume), "Microphone read errors should preserve their C result code");
+            }
+            headsetcontrol::setTestProfile(4);
+            ASSERT_EQ(HSC_RESULT_OK, hsc_get_mic_volume(headsets[i], &mic_volume), "Unavailable battery should not prevent microphone configuration readback");
+            headsetcontrol::setTestProfile(0);
 
             ASSERT_EQ(4, hsc_get_equalizer_presets_count(headsets[i]), "Preset count should be 4");
             ASSERT_EQ(std::string("Flat"), std::string(hsc_get_equalizer_preset_name(headsets[i], 0)), "Flat preset name should match");

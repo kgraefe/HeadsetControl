@@ -182,10 +182,10 @@ inline constexpr std::array<CapabilityDescriptor, NUM_CAPABILITIES> CAPABILITY_D
         .type        = CAPABILITYTYPE_ACTION,
         .name        = "microphone-volume",
         .short_flag  = "",
-        .description = "Set microphone volume level",
+        .description = "Get current microphone volume, or set it to VOLUME",
         .min_value   = 0,
         .max_value   = 128,
-        .value_hint  = "<0-128>" },
+        .value_hint  = "[VOLUME]" },
 
     // CAP_VOLUME_LIMITER
     {
@@ -238,6 +238,17 @@ inline constexpr std::array<CapabilityDescriptor, NUM_CAPABILITIES> CAPABILITY_D
         .name        = "sidetone-status",
         .short_flag  = "",
         .description = "Show current sidetone level",
+        .min_value   = std::nullopt,
+        .max_value   = std::nullopt,
+        .value_hint  = "" },
+
+    // CAP_MICROPHONE_VOLUME_STATUS
+    {
+        .cap         = CAP_MICROPHONE_VOLUME_STATUS,
+        .type        = CAPABILITYTYPE_INFO,
+        .name        = "microphone-volume-status",
+        .short_flag  = "",
+        .description = "Show current microphone volume",
         .min_value   = std::nullopt,
         .max_value   = std::nullopt,
         .value_hint  = "" },

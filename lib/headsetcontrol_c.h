@@ -101,7 +101,8 @@ typedef enum {
     HSC_CAP_BT_CALL_VOLUME                 = 15,
     HSC_CAP_NOISE_FILTER                   = 16,
     HSC_CAP_SIDETONE_STATUS                = 17,
-    HSC_NUM_CAPABILITIES                   = 18,
+    HSC_CAP_MICROPHONE_VOLUME_STATUS       = 18,
+    HSC_NUM_CAPABILITIES                   = 19,
 } hsc_capability_t;
 
 /* ============================================================================
@@ -143,6 +144,15 @@ typedef struct {
     uint8_t device_max;
     const char* level_name; /**< Name valid until next query or headset release; NULL if unavailable */
 } hsc_sidetone_status_t;
+
+typedef struct {
+    uint8_t volume; /**< Normalized microphone volume, 0-128 */
+    uint8_t min_volume;
+    uint8_t max_volume;
+    uint8_t device_level;
+    uint8_t device_min;
+    uint8_t device_max;
+} hsc_mic_volume_t;
 
 typedef struct {
     int level; /**< Chat-mix level (0-128) */
@@ -291,6 +301,14 @@ HSC_API hsc_result_t hsc_get_chatmix(hsc_headset_t headset, hsc_chatmix_t* chatm
  * @return HSC_RESULT_OK on success, negative error code on failure
  */
 HSC_API hsc_result_t hsc_get_sidetone(hsc_headset_t headset, hsc_sidetone_status_t* sidetone);
+
+/**
+ * @brief Get current hardware microphone volume
+ * @param headset Headset handle
+ * @param[out] volume Microphone volume structure to fill
+ * @return HSC_RESULT_OK on success, negative error code on failure
+ */
+HSC_API hsc_result_t hsc_get_mic_volume(hsc_headset_t headset, hsc_mic_volume_t* volume);
 
 /* ============================================================================
  * Audio Controls

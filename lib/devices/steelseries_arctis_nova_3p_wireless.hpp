@@ -3,6 +3,7 @@
 #include "../result_types.hpp"
 #include "protocols/steelseries_protocol.hpp"
 #include <array>
+#include <chrono>
 #include <string_view>
 
 using namespace std::string_view_literals;
@@ -14,7 +15,7 @@ namespace headsetcontrol {
  *
  * Features:
  * - Sidetone (10 levels)
- * - Microphone volume (0-15)
+ * - Microphone volume (0-15, read/write)
  * - Inactive time
  * - Battery status
  * - Equalizer (10 bands)
@@ -96,7 +97,7 @@ public:
     {
         return B(CAP_SIDETONE) | B(CAP_INACTIVE_TIME) | B(CAP_MICROPHONE_VOLUME)
             | B(CAP_BATTERY_STATUS) | B(CAP_EQUALIZER) | B(CAP_EQUALIZER_PRESET)
-            | B(CAP_PARAMETRIC_EQUALIZER);
+            | B(CAP_PARAMETRIC_EQUALIZER) | B(CAP_MICROPHONE_VOLUME_STATUS);
     }
 
     constexpr capability_detail getCapabilityDetail([[maybe_unused]] enum capabilities cap) const override
@@ -273,9 +274,37 @@ public:
         }
 
         return MicVolumeResult {
-            .volume     = volume,
-            .min_volume = 0,
-            .max_volume = 128
+            .volume       = volume,
+            .min_volume   = 0,
+            .max_volume   = 128,
+            .device_level = mapped,
+            .device_min   = 0,
+            .device_max   = 15
+        };
+    }
+
+    Result<MicVolumeResult> getMicVolume(hid_device* device_handle) override
+    {
+        auto settings = querySettings(device_handle, 0x20, 64);
+        if (!settings) {
+            return settings.error();
+        }
+
+        // Opcode, ten six-byte EQ bands, microphone volume, sidetone, limiter.
+        const uint8_t level = (*settings)[61];
+        if (level > 15) {
+            return DeviceError::protocolError("Invalid SteelSeries microphone volume");
+        }
+
+        // Round up so setting the normalized readback selects the same level.
+        const uint8_t normalized = (level * 128 + 14) / 15;
+        return MicVolumeResult {
+            .volume       = normalized,
+            .min_volume   = 0,
+            .max_volume   = 128,
+            .device_level = level,
+            .device_min   = 0,
+            .device_max   = 15
         };
     }
 
@@ -424,6 +453,46 @@ public:
         }
 
         return ParametricEqualizerResult {};
+    }
+
+private:
+    Result<std::vector<uint8_t>> querySettings(hid_device* device_handle, uint8_t opcode, size_t minimum_size) const
+    {
+        // GG uses 64 device bytes plus HIDAPI's synthetic report ID zero.
+        std::array<uint8_t, MSG_SIZE + 1> request {};
+        request[1] = opcode;
+        if (auto result = writeHID(device_handle, request); !result) {
+            return result.error();
+        }
+
+        const auto deadline = std::chrono::steady_clock::now()
+            + std::chrono::milliseconds(hsc_device_timeout);
+        constexpr int MAX_REPORTS = 8;
+        for (int report = 0; report < MAX_REPORTS; ++report) {
+            const auto duration  = deadline - std::chrono::steady_clock::now();
+            const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            const int timeout    = static_cast<int>(std::max<int64_t>(0, remaining));
+            std::vector<uint8_t> response(STATUS_BUF_SIZE);
+            auto result = readHIDTimeout(device_handle, response, timeout);
+            if (!result) {
+                return result.error();
+            }
+            if (*result == 0) {
+                return DeviceError::timeout("No SteelSeries settings response received");
+            }
+            if (opcode != 0xb0 && response[0] == 0xb0) {
+                continue;
+            }
+            if (response[0] != opcode) {
+                return DeviceError::protocolError("Unexpected SteelSeries settings response");
+            }
+            if (*result < minimum_size) {
+                return DeviceError::protocolError("SteelSeries settings response too short");
+            }
+            response.resize(*result);
+            return response;
+        }
+        return DeviceError::protocolError("No SteelSeries settings response received");
     }
 };
 } // namespace headsetcontrol

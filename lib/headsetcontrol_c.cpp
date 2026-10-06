@@ -5,6 +5,9 @@
 #include <string>
 #include <vector>
 
+static_assert(static_cast<int>(HSC_CAP_MICROPHONE_VOLUME_STATUS) == CAP_MICROPHONE_VOLUME_STATUS);
+static_assert(static_cast<int>(HSC_NUM_CAPABILITIES) == NUM_CAPABILITIES);
+
 // ============================================================================
 // Internal State
 // ============================================================================
@@ -441,6 +444,26 @@ hsc_result_t hsc_set_mic_volume(hsc_headset_t headset, uint8_t volume)
 
     auto result = static_cast<HeadsetWrapper*>(headset)->headset.setMicVolume(volume);
     return result ? HSC_RESULT_OK : toErrorCode(result.error());
+}
+
+hsc_result_t hsc_get_mic_volume(hsc_headset_t headset, hsc_mic_volume_t* volume)
+{
+    if (!headset || !volume) {
+        return HSC_RESULT_INVALID_PARAM;
+    }
+
+    auto result = static_cast<HeadsetWrapper*>(headset)->headset.getMicVolume();
+    if (!result) {
+        return toErrorCode(result.error());
+    }
+
+    volume->volume       = result->volume;
+    volume->min_volume   = result->min_volume;
+    volume->max_volume   = result->max_volume;
+    volume->device_level = result->device_level;
+    volume->device_min   = result->device_min;
+    volume->device_max   = result->device_max;
+    return HSC_RESULT_OK;
 }
 
 hsc_result_t hsc_set_mic_mute_led_brightness(hsc_headset_t headset, uint8_t brightness)

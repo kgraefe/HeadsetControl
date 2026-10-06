@@ -56,7 +56,8 @@ extern int hsc_device_timeout;
     X(CAP_BT_WHEN_POWERED_ON, "bluetooth when powered on", '\0')                 \
     X(CAP_BT_CALL_VOLUME, "bluetooth call volume", '\0')                         \
     X(CAP_NOISE_FILTER, "microphone noise filter", '\0')                         \
-    X(CAP_SIDETONE_STATUS, "sidetone status", '\0')
+    X(CAP_SIDETONE_STATUS, "sidetone status", '\0')                              \
+    X(CAP_MICROPHONE_VOLUME_STATUS, "microphone volume status", '\0')
 
 /** @brief A list of all features settable/queryable for headsets
  *
@@ -198,6 +199,7 @@ struct FeatureResult {
     std::optional<int> battery_time_to_empty_min;
     std::optional<int> sidetone_device_level;
     std::optional<std::string> sidetone_level_name;
+    std::optional<int> microphone_device_level;
 };
 
 // FeatureRequest is defined after EqualizerSettings and ParametricEqualizerSettings

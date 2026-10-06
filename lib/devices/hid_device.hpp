@@ -296,6 +296,14 @@ public:
     }
 
     /**
+     * @brief Get current hardware microphone volume
+     */
+    virtual Result<MicVolumeResult> getMicVolume(hid_device* /*device_handle*/)
+    {
+        return DeviceError::notSupported("Device does not support reading microphone volume");
+    }
+
+    /**
      * @brief Set volume limiter
      */
     virtual Result<VolumeLimiterResult> setVolumeLimiter(hid_device* /*device_handle*/, bool /*enabled*/)
